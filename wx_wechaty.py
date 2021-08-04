@@ -9,9 +9,9 @@ from wechaty import Wechaty, Contact, Message
 from wechaty.utils import qr_terminal
 from wechaty_puppet import get_logger, ScanStatus
 
-from conf import bot_id, ref_line, schwarzenegger_group_name
+from conf import bot_id, ref_line, schwarzenegger_group_name, bot_name
 from helper import check_group_member, command_name, punch_in, ask_for_leave, cancel_leave, query_count, \
-    db_connect_wrapper
+    db_connect_wrapper, count_grade_every_week
 
 log = get_logger('RoomBot')
 
@@ -44,7 +44,7 @@ class MyBot(Wechaty):
         is_ask_leave = re.search(command_name["请假"]["command"], content)
         topic = await msg.room().topic() if msg.room() else ''
         if not (msg.room() and topic == schwarzenegger_group_name and need_con in content) \
-                or msg.talker().get_id() == bot_id \
+                or msg.talker().name == bot_name \
                 or (is_punch and is_ask_leave) \
                 or re.search(ref_line, content):
             return
@@ -63,6 +63,10 @@ class MyBot(Wechaty):
                 say_msg = cancel_leave(msg.talker(), topic)
             elif re.search(command_name["查询打卡"]["command"], content):
                 say_msg = query_count(msg.talker(), topic)
+            elif re.search(command_name["本周统计"]["command"], content):
+                say_msg = count_grade_every_week(current_week=True)
+            elif re.search(command_name["上周统计"]["command"], content):
+                say_msg = count_grade_every_week(current_week=False)
             elif is_ask_leave:
                 if re.search(my_nickname, content):
                     say_msg = ask_for_leave(msg.talker(), topic, content)

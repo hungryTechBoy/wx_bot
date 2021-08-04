@@ -5,7 +5,7 @@ from typing import List
 
 from wechaty import Contact
 
-from conf import schwarzenegger_group_id, schwarzenegger_group_name
+from conf import schwarzenegger_group_id, schwarzenegger_group_name, NEED_PUNCH_COUNT, bot_id, bot_name
 from model.punch_in import UserTab, db, SchwarzeneggerPunchInTab
 
 command_name = {
@@ -26,6 +26,12 @@ command_name = {
     "查询打卡": {
         "command": "查询本周打卡次数",
         "成功": "你的本周打卡次数为%s次"
+    },
+    "本周统计": {
+        "command": "查询本周数据统计",
+    },
+    "上周统计": {
+        "command": "查询上周数据统计",
     }
 }
 
@@ -43,31 +49,33 @@ def db_connect_wrapper(func):
 
 
 def check_group_member(contact_list: List[Contact], room_name):
-    contact_map = {c.get_id(): c for c in contact_list}
-    member_ids = [c.get_id() for c in contact_list]
+    contact_map = {c.name: c for c in contact_list}
+    member_names = [c.name for c in contact_list]
     now = datetime.datetime.now()
-    in_db_ids = set([user.user_id for user in
-                     UserTab.select().where(UserTab.group_name == schwarzenegger_group_name)])
-    in_punch_in_ids = set([punch.user_id for punch in
-                           SchwarzeneggerPunchInTab.select().
-                          where(SchwarzeneggerPunchInTab.group_name == schwarzenegger_group_name,
-                                SchwarzeneggerPunchInTab.week == get_zero_week(),
-                                )])
-    member_ids_set = set(member_ids)
+    in_db_names = set([user.name for user in
+                       UserTab.select().where(UserTab.group_name == schwarzenegger_group_name)])
+    in_punch_in_names = set([punch.name for punch in
+                             SchwarzeneggerPunchInTab.select().
+                            where(SchwarzeneggerPunchInTab.group_name == schwarzenegger_group_name,
+                                  SchwarzeneggerPunchInTab.week == get_zero_week(),
+                                  )])
+    member_names_set = set(member_names)
     user_list = []
-    for id in member_ids_set - in_db_ids:
-        user = UserTab(user_id=id, name=contact_map[id].name,
-                       gender=contact_map[id].gender(),
+    for name in member_names_set - in_db_names:
+        user = UserTab(user_id=contact_map[name].get_id(), name=name,
+                       gender=contact_map[name].gender(),
                        group_id=schwarzenegger_group_id,
                        group_name=room_name,
                        ctime=now
                        )
         user_list.append(user)
     punch_list = []
-    for id in member_ids_set - in_punch_in_ids:
+    for name in member_names_set - in_punch_in_names:
+        if name == bot_name:
+            continue
         punch = SchwarzeneggerPunchInTab(
-            user_id=id,
-            name=contact_map[id].name,
+            user_id=contact_map[name].get_id(),
+            name=name,
             group_id=schwarzenegger_group_id,
             group_name=room_name,
             punch_in_count=0,
@@ -83,24 +91,24 @@ def check_group_member(contact_list: List[Contact], room_name):
         UserTab.bulk_create(user_list, batch_size=100)
         SchwarzeneggerPunchInTab.bulk_create(punch_list, batch_size=100)
 
-        del_user_ids = in_db_ids - member_ids_set
-        if len(del_user_ids) > 0:
-            UserTab.delete().where(UserTab.user_id.in_(del_user_ids)).execute()
+        del_user_names = in_db_names - member_names_set
+        if len(del_user_names):
+            UserTab.delete().where(UserTab.name.in_(del_user_names)).execute()
 
-        del_punch_ids = in_punch_in_ids - member_ids_set
-        if len(del_punch_ids):
+        del_punch_names = in_punch_in_names - member_names_set
+        if len(del_punch_names):
             SchwarzeneggerPunchInTab.delete().where(
-                SchwarzeneggerPunchInTab.user_id.in_(del_user_ids),
+                SchwarzeneggerPunchInTab.name.in_(del_user_names),
                 SchwarzeneggerPunchInTab.week == get_zero_week(),
             ).execute()
 
 
 def get_or_create_punch(contact: Contact, room_name):
     now = datetime.datetime.now()
-    punch, created = SchwarzeneggerPunchInTab.get_or_create(user_id=contact.get_id(),
+    punch, created = SchwarzeneggerPunchInTab.get_or_create(name=contact.name,
                                                             group_id=schwarzenegger_group_id,
                                                             week=get_zero_week(),
-                                                            defaults={'name': contact.name,
+                                                            defaults={'user_id': contact.get_id(),
                                                                       'group_name': room_name,
                                                                       "ask_leave": False,
                                                                       "punch_in_count": 0,
@@ -146,24 +154,47 @@ def query_count(contact: Contact, room_name):
     return command_name["查询打卡"]["成功"] % punch.punch_in_count
 
 
-# def count_grade_every_week():
-#     query = SchwarzeneggerPunchInTab.select().where(
-#         SchwarzeneggerPunchInTab.group_id == schwarzenegger_group_id,
-#         SchwarzeneggerPunchInTab.week == get_pre_zero_week(),
-#         SchwarzeneggerPunchInTab.ask_leave == False,
-#         SchwarzeneggerPunchInTab.punch_in_count < NEED_PUNCH_COUNT
-#     ).order_by(SchwarzeneggerPunchInTab.punch_in_count)
-#
-#     low_grade_list = []
-#     for q in query:
-#         low_grade_list.append("@%s 本周缺卡%s次\n" % (q.name, NEED_PUNCH_COUNT - q.punch_in_count))
-#
-#     query = SchwarzeneggerPunchInTab.select().where(
-#         SchwarzeneggerPunchInTab.group_id == schwarzenegger_group_id,
-#         SchwarzeneggerPunchInTab.week == get_pre_zero_week(),
-#         SchwarzeneggerPunchInTab.ask_leave == False,
-#         SchwarzeneggerPunchInTab.punch_in_count >= NEED_PUNCH_COUNT
-#     ).order_by(SchwarzeneggerPunchInTab.punch_in_count.desc()).limit(3)
+def count_grade_every_week(current_week):
+    out_str_list = []
+    if current_week:
+        out_str_list.append("\n本周数据统计如下")
+        week_fun = get_zero_week
+    else:
+        out_str_list.append("\n上周数据统计如下")
+        week_fun = get_pre_zero_week
+
+    out_str_list.append("缺卡数据明细:")
+    query = SchwarzeneggerPunchInTab.select().where(
+        SchwarzeneggerPunchInTab.group_id == schwarzenegger_group_id,
+        SchwarzeneggerPunchInTab.week == week_fun(),
+        SchwarzeneggerPunchInTab.ask_leave == False,
+        SchwarzeneggerPunchInTab.punch_in_count < NEED_PUNCH_COUNT
+    ).order_by(SchwarzeneggerPunchInTab.punch_in_count)
+    for q in query:
+        if q.name == bot_name:
+            continue
+        out_str_list.append("@%s 缺卡%s次" % (q.name, NEED_PUNCH_COUNT - q.punch_in_count))
+
+    out_str_list.append("打卡排行榜:")
+    query = SchwarzeneggerPunchInTab.select().where(
+        SchwarzeneggerPunchInTab.group_id == schwarzenegger_group_id,
+        SchwarzeneggerPunchInTab.week == week_fun(),
+        SchwarzeneggerPunchInTab.ask_leave == False,
+        SchwarzeneggerPunchInTab.punch_in_count >= NEED_PUNCH_COUNT
+    ).order_by(SchwarzeneggerPunchInTab.punch_in_count.desc()).limit(3)
+    for q in query:
+        out_str_list.append("@%s 打卡%s次" % (q.name, q.punch_in_count))
+
+    out_str_list.append("请假明细:")
+    query = SchwarzeneggerPunchInTab.select().where(
+        SchwarzeneggerPunchInTab.group_id == schwarzenegger_group_id,
+        SchwarzeneggerPunchInTab.week == week_fun(),
+        SchwarzeneggerPunchInTab.ask_leave == True,
+    )
+    for q in query:
+        out_str_list.append("@%s 请假" % (q.name))
+
+    return '\n'.join(out_str_list)
 
 
 def get_zero_week():
