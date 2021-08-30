@@ -8,12 +8,14 @@ from wechaty import Contact
 from conf import schwarzenegger_group_id, schwarzenegger_group_name, NEED_PUNCH_COUNT, bot_id, bot_name
 from model.punch_in import UserTab, db, SchwarzeneggerPunchInTab
 
+punch_interval = 6
 command_name = {
     "打卡": {
         "command": "本周第(\d+)次打卡",
         "成功": "你做的很棒！请再接再厉！",
         "已经请假": "你已经请假，请取消请假后再打卡。",
         "次数不对": "你上次打卡为第 %s 次，请勿跳卡。",
+        "间隔过短": "打卡失败，距离上次打卡时间需要超过%s小时" % punch_interval
     },
     "请假": {
         "command": "我本周请假",
@@ -32,6 +34,10 @@ command_name = {
     },
     "上周统计": {
         "command": "查询上周数据统计",
+    },
+    "取消打卡": {
+        "command": "取消上次打卡",
+        "成功": "成功取消上次打卡，你的本周打卡次数为%s次"
     }
 }
 
@@ -125,6 +131,8 @@ def punch_in(contact: Contact, room_name, count):
         return command_name["打卡"]["已经请假"]
     if count - punch.punch_in_count != 1:
         return command_name["打卡"]["次数不对"] % punch.punch_in_count
+    if punch.punch_in_count > 0 and (punch.mtime + datetime.timedelta(hours=6) > now):
+        return command_name["打卡"]["间隔过短"] % punch_interval
 
     punch.punch_in_count = count
     punch.mtime = now
@@ -135,7 +143,6 @@ def punch_in(contact: Contact, room_name, count):
 def ask_for_leave(contact: Contact, room_name, reason):
     punch = get_or_create_punch(contact, room_name)
     punch.ask_leave = True
-    punch.mtime = datetime.datetime.now()
     punch.reason = reason
     punch.save()
     return command_name["请假"]["成功"]
@@ -144,9 +151,16 @@ def ask_for_leave(contact: Contact, room_name, reason):
 def cancel_leave(contact: Contact, room_name):
     punch = get_or_create_punch(contact, room_name)
     punch.ask_leave = False
-    punch.mtime = datetime.datetime.now()
     punch.save()
     return command_name["取消请假"]["成功"]
+
+
+def cancel_pre_punch(contact: Contact, room_name):
+    punch = get_or_create_punch(contact, room_name)
+    if punch.punch_in_count > 0:
+        punch.punch_in_count -= 1
+        punch.save()
+    return command_name["取消打卡"]["成功"] % punch.punch_in_count
 
 
 def query_count(contact: Contact, room_name):

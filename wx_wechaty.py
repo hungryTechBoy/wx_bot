@@ -11,7 +11,7 @@ from wechaty_puppet import get_logger, ScanStatus
 
 from conf import bot_id, ref_line, schwarzenegger_group_name, bot_name
 from helper import check_group_member, command_name, punch_in, ask_for_leave, cancel_leave, query_count, \
-    db_connect_wrapper, count_grade_every_week
+    db_connect_wrapper, count_grade_every_week, cancel_pre_punch
 
 log = get_logger('RoomBot')
 
@@ -67,18 +67,22 @@ class MyBot(Wechaty):
                 say_msg = count_grade_every_week(current_week=True)
             elif re.search(command_name["上周统计"]["command"], content):
                 say_msg = count_grade_every_week(current_week=False)
+            elif re.search(command_name["取消打卡"]["command"], content):
+                say_msg = cancel_pre_punch(msg.talker(), topic)
             elif is_ask_leave:
                 if re.search(my_nickname, content):
                     say_msg = ask_for_leave(msg.talker(), topic, content)
                 else:
-                    say_msg = "请艾特群主%s请假" % my_nickname
+                    say_msg = "请同时艾特打卡机器人和群主%s请假" % my_nickname
             else:
                 say_msg = """没有找到命令，请检查你的输入
 支持的命令:
 "@没有感情的打卡机器 本周第N次打卡"-->打卡，注意N只能为数字，且不能跳着打卡
 "@没有感情的打卡机器 @Valar·Morghulis 我本周请假" -->请假
 "@没有感情的打卡机器 取消我的请假" -->取消我的请假
-"@没有感情的打卡机器 查询本周打卡次数" --> 查询本周已打卡次数"""
+"@没有感情的打卡机器 查询本周打卡次数" --> 查询本周已打卡次数
+"@没有感情的打卡机器 取消上次打卡" --> 取消上次打卡
+"""
             say_msg = "@%s %s" % (msg.talker().name, say_msg)
             await msg.say(say_msg, mention_ids=[msg.talker().get_id()])
         except AssertionError as e:
