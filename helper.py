@@ -132,7 +132,7 @@ def punch_in(contact: Contact, room_name, count):
     if count - punch.punch_in_count != 1:
         return command_name["打卡"]["次数不对"] % punch.punch_in_count
     if punch.punch_in_count > 0 and (punch.mtime + datetime.timedelta(hours=6) > now):
-        return command_name["打卡"]["间隔过短"] % punch_interval
+        return command_name["打卡"]["间隔过短"]
 
     punch.punch_in_count = count
     punch.mtime = now
