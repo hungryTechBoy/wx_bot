@@ -9,14 +9,11 @@ from wechaty import Wechaty, Contact, Message
 from wechaty.utils import qr_terminal
 from wechaty_puppet import get_logger, ScanStatus
 
-from conf import bot_id, ref_line, schwarzenegger_group_name, bot_name
+from conf import ref_line, schwarzenegger_group_name, bot_name, need_con, my_nickname
 from helper import check_group_member, command_name, punch_in, ask_for_leave, cancel_leave, query_count, \
-    db_connect_wrapper, count_grade_every_week, cancel_pre_punch
+    db_connect_wrapper, count_grade_every_week, cancel_pre_punch, auto_chat_bot
 
 log = get_logger('RoomBot')
-
-need_con = "@没有感情的打卡机器"
-my_nickname = "@Valar·Morghulis"
 
 
 class MyBot(Wechaty):
@@ -69,6 +66,8 @@ class MyBot(Wechaty):
                 say_msg = count_grade_every_week(current_week=False)
             elif re.search(command_name["取消打卡"]["command"], content):
                 say_msg = cancel_pre_punch(msg.talker(), topic)
+            elif re.search(command_name["聊天"]["command"], content):
+                say_msg = auto_chat_bot(content)
             elif is_ask_leave:
                 if re.search(my_nickname, content):
                     say_msg = ask_for_leave(msg.talker(), topic, content)

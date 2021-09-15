@@ -1,27 +1,13 @@
-import time
-from datetime import datetime
-import os
+import urllib
 
-from apscheduler.schedulers.blocking import BlockingScheduler
-import os
-import time
-from datetime import datetime
-
-from apscheduler.schedulers.blocking import BlockingScheduler
+import requests
 
 
-def tick():
-    print('Tick! The time is: %s' % datetime.now())
-
-
-if __name__ == '__main__':
-    scheduler = BlockingScheduler()
-    # scheduler.add_executor('processpool')
-    scheduler.add_job(tick, 'cron', day_of_week='mon', hour=12, minute=0)
-    print('Press Ctrl+{0} to exit'.format('Break' if os.name == 'nt' else 'C'))
-
-    try:
-        scheduler.start()
-        time.sleep(1000000)
-    except (KeyboardInterrupt, SystemExit):
-        pass
+def qingyunke(msg):
+    url = 'http://api.qingyunke.com/api.php?key=free&appid=0&msg={}'.format(urllib.parse.quote(msg))
+    html = requests.get(url)
+    return html.json()["content"].replace("{br}",'\n')
+msg = '歌词后来'
+print("原话>>", msg)
+res = qingyunke(msg)
+print("青云客>>", res)

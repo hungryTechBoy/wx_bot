@@ -1,11 +1,13 @@
 # coding: utf-8
 import datetime
 import functools
+import urllib
 from typing import List
 
+import requests
 from wechaty import Contact
 
-from conf import schwarzenegger_group_id, schwarzenegger_group_name, NEED_PUNCH_COUNT, bot_id, bot_name
+from conf import schwarzenegger_group_id, schwarzenegger_group_name, NEED_PUNCH_COUNT, bot_id, bot_name, need_con
 from model.punch_in import UserTab, db, SchwarzeneggerPunchInTab
 
 punch_interval = 6
@@ -38,6 +40,9 @@ command_name = {
     "取消打卡": {
         "command": "取消上次打卡",
         "成功": "成功取消上次打卡，你的本周打卡次数为%s次"
+    },
+    "聊天": {
+        "command": "#聊天#",
     }
 }
 
@@ -223,3 +228,15 @@ def get_pre_zero_week():
     zero_week = now - datetime.timedelta(days=now.weekday() + 7, hours=now.hour, minutes=now.minute, seconds=now.second,
                                          microseconds=now.microsecond)
     return zero_week
+
+
+def qingyunke(msg):
+    url = 'http://api.qingyunke.com/api.php?key=free&appid=0&msg={}'.format(urllib.parse.quote(msg))
+    html = requests.get(url)
+    return html.json()["content"].replace("{br}", '\n')
+
+
+def auto_chat_bot(content):
+    content = content.replace(need_con, "")
+    content = content.replace(command_name["聊天"]["command"], "")
+    return qingyunke(content)

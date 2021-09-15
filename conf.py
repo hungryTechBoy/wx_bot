@@ -15,3 +15,6 @@ HOST = "127.0.0.1"
 PORT = 3306
 
 NEED_PUNCH_COUNT = 3
+
+need_con = "@没有感情的打卡机器"
+my_nickname = "@Valar·Morghulis"
